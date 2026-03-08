@@ -1,0 +1,2 @@
+raw_dir: "/data/datasets/openalex/raw"
+output_dir: "/data/datasets/openalex/preprocessed"
