@@ -4,7 +4,7 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -20,62 +20,70 @@ else:
 
 
 print("Building category data...")
-df = pd.read_csv(topics_file)
+df = pl.read_csv(topics_file)
 
 # --- Build category table ---
 # Extract unique fields (main classes)
-fields = df[["field_id", "field_name"]].drop_duplicates(subset="field_id")
-fields = fields[fields["field_id"] >= 0].sort_values("field_id").reset_index(drop=True)
+fields = (
+    df.select("field_id", "field_name")
+    .unique(subset="field_id")
+    .filter(pl.col("field_id") >= 0)
+    .sort("field_id")
+)
 
 # Extract unique subfields (sub classes)
-subfields = df[["subfield_id", "subfield_name"]].drop_duplicates(subset="subfield_id")
-subfields = subfields[subfields["subfield_id"] >= 0].sort_values("subfield_id").reset_index(drop=True)
+subfields = (
+    df.select("subfield_id", "subfield_name")
+    .unique(subset="subfield_id")
+    .filter(pl.col("subfield_id") >= 0)
+    .sort("subfield_id")
+)
 
 # Assign sequential class_ids
-cat_rows = []
-field_id_to_class_id = {}
-for i, row in enumerate(fields.itertuples()):
-    class_id = i
-    field_id_to_class_id[row.field_id] = class_id
-    cat_rows.append({
-        "class_id": class_id,
-        "type": "main",
-        "title": row.field_name,
-        "openalex_id": int(row.field_id),
-    })
+field_ids = fields.get_column("field_id").to_list()
+field_names = fields.get_column("field_name").to_list()
+subfield_ids = subfields.get_column("subfield_id").to_list()
+subfield_names = subfields.get_column("subfield_name").to_list()
 
-subfield_id_to_class_id = {}
-offset = len(fields)
-for i, row in enumerate(subfields.itertuples()):
-    class_id = offset + i
-    subfield_id_to_class_id[row.subfield_id] = class_id
-    cat_rows.append({
-        "class_id": class_id,
-        "type": "sub",
-        "title": row.subfield_name,
-        "openalex_id": int(row.subfield_id),
-    })
+field_id_to_class_id = {fid: i for i, fid in enumerate(field_ids)}
+offset = len(field_ids)
+subfield_id_to_class_id = {sid: offset + i for i, sid in enumerate(subfield_ids)}
 
-cat_df = pd.DataFrame(cat_rows)
-cat_df.to_csv(output_category_table, index=False)
-print(f"  Categories: {len(cat_df)} ({len(fields)} fields, {len(subfields)} subfields)")
+cat_df = pl.DataFrame({
+    "class_id": list(range(len(field_ids) + len(subfield_ids))),
+    "type": ["main"] * len(field_ids) + ["sub"] * len(subfield_ids),
+    "title": field_names + subfield_names,
+    "openalex_id": field_ids + subfield_ids,
+})
+
+cat_df.write_csv(output_category_table)
+print(f"  Categories: {len(cat_df)} ({len(field_ids)} fields, {len(subfield_ids)} subfields)")
 print(f"  Saved {output_category_table}")
 
 # --- Build paper-category table ---
-paper_cat_rows = []
-for row in df.itertuples():
-    main_class_id = field_id_to_class_id.get(row.field_id, -1)
-    sub_class_id = subfield_id_to_class_id.get(row.subfield_id, -1)
-    if main_class_id >= 0:
-        paper_cat_rows.append({
-            "paper_id": int(row.paper_id),
-            "main_class_id": main_class_id,
-            "sub_class_id": sub_class_id,
-            "sequence": int(row.sequence),
-        })
+# Map field_id and subfield_id to class_id
+field_map_df = pl.DataFrame({
+    "field_id": list(field_id_to_class_id.keys()),
+    "main_class_id": list(field_id_to_class_id.values()),
+})
+subfield_map_df = pl.DataFrame({
+    "subfield_id": list(subfield_id_to_class_id.keys()),
+    "sub_class_id": list(subfield_id_to_class_id.values()),
+})
 
-paper_cat_df = pd.DataFrame(paper_cat_rows)
-paper_cat_df = paper_cat_df.sort_values(["paper_id", "sequence"]).reset_index(drop=True)
-paper_cat_df.to_csv(output_paper_category_table, index=False)
+paper_cat_df = (
+    df.join(field_map_df, on="field_id", how="left")
+    .join(subfield_map_df, on="subfield_id", how="left")
+    .filter(pl.col("main_class_id").is_not_null())
+    .select(
+        pl.col("paper_id"),
+        pl.col("main_class_id").cast(pl.Int64),
+        pl.col("sub_class_id").fill_null(-1).cast(pl.Int64),
+        pl.col("sequence"),
+    )
+    .sort("paper_id", "sequence")
+)
+
+paper_cat_df.write_csv(output_paper_category_table)
 print(f"  Paper-category assignments: {len(paper_cat_df):,}")
 print(f"  Saved {output_paper_category_table}")

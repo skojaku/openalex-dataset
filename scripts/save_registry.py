@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -22,21 +22,21 @@ else:
 
 print("Saving OpenAlex registry...")
 idx = np.load(paper_index_file)
+oa_ids_sorted = idx["oa_ids_sorted"]
 n_papers = int(idx["n_papers"][0])
 
 # Load author table to get author count and OA author IDs
-author_df = pd.read_csv(author_table_file, usecols=["author_id", "openalex_author_id"])
+author_df = pl.read_csv(author_table_file, columns=["author_id", "openalex_author_id"])
 n_authors = len(author_df)
-oa_author_ids = author_df["openalex_author_id"].values.astype(np.int64)
-author_ids = author_df["author_id"].values.astype(np.int64)
+oa_author_ids = author_df.get_column("openalex_author_id").to_numpy().astype(np.int64)
+author_ids = author_df.get_column("author_id").to_numpy().astype(np.int64)
 
 sync_date = datetime.now().strftime("%Y-%m-%d")
 
 np.savez(
     output_file,
-    # Paper mappings (sorted by oa_id for binary search)
-    oa_ids_sorted=idx["oa_ids_sorted"],
-    paper_ids_for_sorted=idx["paper_ids_for_sorted"],
+    # Paper mappings: paper_id = position in oa_ids_sorted
+    oa_ids_sorted=oa_ids_sorted,
     # Author mappings
     oa_author_ids=oa_author_ids,
     author_ids=author_ids,

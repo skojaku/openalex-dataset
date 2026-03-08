@@ -3,7 +3,7 @@
 import os
 import sys
 
-import pandas as pd
+import polars as pl
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -15,13 +15,11 @@ else:
 
 
 print("Building source_table.csv...")
-df = pd.read_csv(source_names_file, dtype=str)
-df["source_id"] = df["source_id"].astype(int)
-df["openalex_source_id"] = df["openalex_source_id"].astype(int)
+df = pl.read_csv(source_names_file, schema_overrides={"source_id": pl.Int64, "openalex_source_id": pl.Int64})
 
 # Deduplicate (should already be unique from pass2)
-df = df.drop_duplicates(subset="source_id").sort_values("source_id").reset_index(drop=True)
+df = df.unique(subset="source_id").sort("source_id")
 
-df.to_csv(output_file, index=False)
+df.write_csv(output_file)
 print(f"  Sources: {len(df):,}")
 print(f"  Saved {output_file}")

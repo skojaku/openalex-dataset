@@ -4,7 +4,7 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from scipy import sparse
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -30,14 +30,16 @@ idx = np.load(paper_index_file)
 n_papers = int(idx["n_papers"][0])
 
 # --- Author table ---
-author_df = pd.read_csv(auth_names_file, dtype={"orcid": str, "name": str})
+author_df = pl.read_csv(
+    auth_names_file,
+    schema_overrides={"orcid": pl.String, "name": pl.String},
+)
 # Deduplicate by author_id (should already be unique from pass2)
-author_df = author_df.drop_duplicates(subset="author_id").sort_values("author_id")
-author_df = author_df.reset_index(drop=True)
+author_df = author_df.unique(subset="author_id").sort("author_id")
 n_authors = len(author_df)
 print(f"  Authors: {n_authors:,}")
 
-author_df.to_csv(output_author_table, index=False)
+author_df.write_csv(output_author_table)
 print(f"  Saved {output_author_table}")
 
 # --- Paper-author network ---

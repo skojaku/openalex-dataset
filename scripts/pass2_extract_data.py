@@ -56,7 +56,6 @@ else:
 print("Loading paper index...")
 idx = np.load(paper_index_file)
 oa_ids_sorted = idx["oa_ids_sorted"]
-paper_ids_for_sorted = idx["paper_ids_for_sorted"]
 n_papers = int(idx["n_papers"][0])
 print(f"  {n_papers:,} papers in index.")
 
@@ -65,7 +64,7 @@ def lookup_single(oa_id):
     """Look up a single OpenAlex ID -> paper_id. Returns -1 if not found."""
     pos = np.searchsorted(oa_ids_sorted, oa_id)
     if pos < len(oa_ids_sorted) and oa_ids_sorted[pos] == oa_id:
-        return int(paper_ids_for_sorted[pos])
+        return int(pos)
     return -1
 
 
@@ -182,7 +181,7 @@ for work in stream_works(snapshot_dir):
         # Flush citation batch if large enough
         if len(cit_batch_paper_ids) >= CIT_BATCH_SIZE:
             ref_paper_ids = lookup_ids_batch(
-                cit_batch_ref_oa_ids, oa_ids_sorted, paper_ids_for_sorted
+                cit_batch_ref_oa_ids, oa_ids_sorted
             )
             mask = ref_paper_ids >= 0
             if mask.any():
@@ -249,7 +248,7 @@ for work in stream_works(snapshot_dir):
 # --- Flush remaining citation batch ---
 if cit_batch_paper_ids:
     ref_paper_ids = lookup_ids_batch(
-        cit_batch_ref_oa_ids, oa_ids_sorted, paper_ids_for_sorted
+        cit_batch_ref_oa_ids, oa_ids_sorted
     )
     mask = ref_paper_ids >= 0
     if mask.any():

@@ -7,7 +7,7 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from scipy import sparse
 from scipy.sparse.csgraph import connected_components
 
@@ -25,8 +25,11 @@ else:
 
 
 print("Building paper_table.csv...")
-df = pd.read_csv(metadata_file, dtype={"doi": str, "language": str, "type": str, "source_id": "Int64"})
-df = df.sort_values("paper_id").reset_index(drop=True)
+df = pl.read_csv(
+    metadata_file,
+    schema_overrides={"doi": pl.String, "language": pl.String, "type": pl.String, "source_id": pl.Int64},
+)
+df = df.sort("paper_id")
 
 # Verify completeness against index
 idx = np.load(paper_index_file)
@@ -48,8 +51,10 @@ print(f"  Largest component: {lcc_size:,} ({lcc_size / n_papers:.4f})")
 # Add is_connected flag: 1 if in LCC, 0 otherwise
 is_connected = (labels == largest_component).astype(np.int8)
 # Map to dataframe by paper_id
-is_connected_series = pd.Series(is_connected, name="is_connected")
-df["is_connected"] = is_connected_series.iloc[df["paper_id"].values].values
+paper_ids = df.get_column("paper_id").to_numpy()
+df = df.with_columns(
+    pl.Series("is_connected", is_connected[paper_ids])
+)
 
-df.to_csv(output_file, index=False)
+df.write_csv(output_file)
 print(f"  Saved {output_file}")

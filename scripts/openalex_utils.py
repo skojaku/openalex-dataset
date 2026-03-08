@@ -86,11 +86,11 @@ def stream_works(snapshot_dir, partitions=None):
                         yield json.loads(line)
 
 
-def lookup_ids_batch(query_ids, sorted_oa_ids, mapped_paper_ids):
+def lookup_ids_batch(query_ids, sorted_oa_ids):
     """Vectorized ID mapping using binary search.
 
     Given query OpenAlex IDs, look them up in sorted_oa_ids and return
-    the corresponding mapped_paper_ids. Returns -1 for IDs not found.
+    the position (= paper_id). Returns -1 for IDs not found.
     """
     query_ids = np.asarray(query_ids, dtype=np.int64)
     indices = np.searchsorted(sorted_oa_ids, query_ids)
@@ -99,7 +99,7 @@ def lookup_ids_batch(query_ids, sorted_oa_ids, mapped_paper_ids):
     indices_clamped = np.where(valid, indices, 0)
     matches = valid & (sorted_oa_ids[indices_clamped] == query_ids)
     result = np.full(len(query_ids), -1, dtype=np.int64)
-    result[matches] = mapped_paper_ids[indices_clamped[matches]]
+    result[matches] = indices_clamped[matches]
     return result
 
 
