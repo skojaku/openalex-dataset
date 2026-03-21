@@ -8,7 +8,9 @@ import polars as pl
 from scipy import sparse
 
 sys.path.insert(0, os.path.dirname(__file__))
-from openalex_utils import BinaryEdgeReader
+from openalex_utils import BinaryEdgeReader, setup_logging
+
+log = setup_logging(__name__)
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -25,7 +27,7 @@ else:
     output_net = "paper_author_net.npz"
 
 
-print("Building author data...")
+log.info("Building author data...")
 idx = np.load(paper_index_file)
 n_papers = int(idx["n_papers"][0])
 
@@ -37,14 +39,14 @@ author_df = pl.read_csv(
 # Deduplicate by author_id (should already be unique from pass2)
 author_df = author_df.unique(subset="author_id").sort("author_id")
 n_authors = len(author_df)
-print(f"  Authors: {n_authors:,}")
+log.info(f"  Authors: {n_authors:,}")
 
 author_df.write_csv(output_author_table)
-print(f"  Saved {output_author_table}")
+log.info(f"  Saved {output_author_table}")
 
 # --- Paper-author network ---
 reader = BinaryEdgeReader(auth_edges_file)
-print(f"  Authorship edges: {reader.n_edges:,}")
+log.info(f"  Authorship edges: {reader.n_edges:,}")
 
 paper_ids, author_ids = reader.read_all()
 
@@ -55,6 +57,6 @@ net = sparse.csr_matrix(
 net.data[:] = 1
 
 sparse.save_npz(output_net, net)
-print(f"  Shape: {net.shape}")
-print(f"  Non-zero entries: {net.nnz:,}")
-print(f"  Saved {output_net}")
+log.info(f"  Shape: {net.shape}")
+log.info(f"  Non-zero entries: {net.nnz:,}")
+log.info(f"  Saved {output_net}")

@@ -12,6 +12,11 @@ import sys
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+sys.path.insert(0, os.path.dirname(__file__))
+from openalex_utils import setup_logging
+
+log = setup_logging(__name__)
+
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
     abstracts_file = snakemake.input["abstracts"]
@@ -28,7 +33,7 @@ schema = pa.schema([
     ("abstract", pa.large_string()),
 ])
 
-print("Building abstracts.parquet (chunked)...")
+log.info("Building abstracts.parquet (chunked)...")
 total_rows = 0
 
 writer = pq.ParquetWriter(output_file, schema, compression="snappy")
@@ -53,7 +58,7 @@ with gzip.open(abstracts_file, "rt", encoding="utf-8") as f:
             table = table.sort_by("paper_id")
             writer.write_table(table)
             total_rows += len(paper_ids)
-            print(f"  Written {total_rows:,} rows...")
+            log.info(f"  Written {total_rows:,} rows...")
             paper_ids.clear()
             abstracts.clear()
 
@@ -68,5 +73,5 @@ with gzip.open(abstracts_file, "rt", encoding="utf-8") as f:
         total_rows += len(paper_ids)
 
 writer.close()
-print(f"  Total abstracts: {total_rows:,}")
-print(f"  Saved {output_file}")
+log.info(f"  Total abstracts: {total_rows:,}")
+log.info(f"  Saved {output_file}")

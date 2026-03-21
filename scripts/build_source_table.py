@@ -5,6 +5,11 @@ import sys
 
 import polars as pl
 
+sys.path.insert(0, os.path.dirname(__file__))
+from openalex_utils import setup_logging
+
+log = setup_logging(__name__)
+
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
     source_names_file = snakemake.input["source_names"]
@@ -14,12 +19,12 @@ else:
     output_file = "source_table.csv"
 
 
-print("Building source_table.csv...")
+log.info("Building source_table.csv...")
 df = pl.read_csv(source_names_file, schema_overrides={"source_id": pl.Int64, "openalex_source_id": pl.Int64})
 
 # Deduplicate (should already be unique from pass2)
 df = df.unique(subset="source_id").sort("source_id")
 
 df.write_csv(output_file)
-print(f"  Sources: {len(df):,}")
-print(f"  Saved {output_file}")
+log.info(f"  Sources: {len(df):,}")
+log.info(f"  Saved {output_file}")

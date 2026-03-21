@@ -26,8 +26,13 @@ from openalex_utils import (
     lookup_ids_batch,
     parse_openalex_id,
     reconstruct_abstract,
+    setup_logging,
     stream_works,
 )
+
+log = setup_logging(__name__)
+
+KEEP_TYPES = {"article", "book-chapter", "preprint", "review", "letter", "book-section"}
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -53,11 +58,11 @@ else:
 
 
 # --- Load paper index ---
-print("Loading paper index...")
+log.info("Loading paper index...")
 idx = np.load(paper_index_file)
 oa_ids_sorted = idx["oa_ids_sorted"]
 n_papers = int(idx["n_papers"][0])
-print(f"  {n_papers:,} papers in index.")
+log.info(f"  {n_papers:,} papers in index.")
 
 
 def lookup_single(oa_id):
@@ -124,7 +129,7 @@ CIT_BATCH_SIZE = 10000
 cit_batch_paper_ids = []
 cit_batch_ref_oa_ids = []
 
-print("Pass 2: Extracting data from works...")
+log.info("Pass 2: Extracting data from works...")
 for work in stream_works(snapshot_dir):
     oa_id = parse_openalex_id(work.get("id"))
     if oa_id < 0:
@@ -140,6 +145,8 @@ for work in stream_works(snapshot_dir):
     doi = work.get("doi", "")
     title = work.get("title", "")
     work_type = work.get("type", "")
+    if work_type not in KEEP_TYPES:
+        continue
     cited_by_count = work.get("cited_by_count", 0)
     language = work.get("language", "")
 
@@ -243,7 +250,7 @@ for work in stream_works(snapshot_dir):
 
     count += 1
     if count % 10_000_000 == 0:
-        print(f"  Processed {count:,} works...")
+        log.info(f"  Processed {count:,} works...")
 
 # --- Flush remaining citation batch ---
 if cit_batch_paper_ids:
@@ -266,11 +273,11 @@ topics_fh.close()
 abs_fh.close()
 source_fh.close()
 
-print(f"Pass 2 complete:")
-print(f"  Papers processed: {count:,}")
-print(f"  Citation edges: {n_cit_edges:,}")
-print(f"  Authorship edges: {n_auth_edges:,}")
-print(f"  Authors: {next_author_id:,}")
-print(f"  Sources: {next_source_id:,}")
-print(f"  Topic assignments: {n_topics:,}")
-print(f"  Abstracts: {n_abstracts:,}")
+log.info(f"Pass 2 complete:")
+log.info(f"  Papers processed: {count:,}")
+log.info(f"  Citation edges: {n_cit_edges:,}")
+log.info(f"  Authorship edges: {n_auth_edges:,}")
+log.info(f"  Authors: {next_author_id:,}")
+log.info(f"  Sources: {next_source_id:,}")
+log.info(f"  Topic assignments: {n_topics:,}")
+log.info(f"  Abstracts: {n_abstracts:,}")

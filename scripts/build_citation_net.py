@@ -7,7 +7,9 @@ import numpy as np
 from scipy import sparse
 
 sys.path.insert(0, os.path.dirname(__file__))
-from openalex_utils import BinaryEdgeReader
+from openalex_utils import BinaryEdgeReader, setup_logging
+
+log = setup_logging(__name__)
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -20,12 +22,12 @@ else:
     output_file = "citation_net.npz"
 
 
-print("Building citation_net.npz...")
+log.info("Building citation_net.npz...")
 idx = np.load(paper_index_file)
 n_papers = int(idx["n_papers"][0])
 
 reader = BinaryEdgeReader(cit_edges_file)
-print(f"  Total edges in file: {reader.n_edges:,}")
+log.info(f"  Total edges in file: {reader.n_edges:,}")
 
 srcs, dsts = reader.read_all()
 
@@ -43,6 +45,6 @@ net = sparse.csr_matrix(
 net.data[:] = 1
 
 sparse.save_npz(output_file, net)
-print(f"  Shape: {net.shape}")
-print(f"  Non-zero entries: {net.nnz:,}")
-print(f"  Saved {output_file}")
+log.info(f"  Shape: {net.shape}")
+log.info(f"  Non-zero entries: {net.nnz:,}")
+log.info(f"  Saved {output_file}")

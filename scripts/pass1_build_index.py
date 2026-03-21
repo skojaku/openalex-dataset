@@ -14,7 +14,11 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-from openalex_utils import parse_openalex_id, stream_works
+from openalex_utils import parse_openalex_id, setup_logging, stream_works
+
+log = setup_logging(__name__)
+
+KEEP_TYPES = {"article", "book-chapter", "preprint", "review", "letter", "book-section"}
 
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
@@ -30,10 +34,14 @@ INIT_SIZE = 100_000_000  # pre-allocate for ~250M works
 oa_ids = np.empty(INIT_SIZE, dtype=np.int64)
 count = 0
 
-print("Pass 1: Scanning works to build paper index...")
+log.info("Pass 1: Scanning works to build paper index...")
 for work in stream_works(snapshot_dir):
     oa_id = parse_openalex_id(work.get("id"))
     if oa_id < 0:
+        continue
+
+    work_type = work.get("type", "")
+    if work_type not in KEEP_TYPES:
         continue
 
     # Grow array if needed
@@ -45,11 +53,11 @@ for work in stream_works(snapshot_dir):
     count += 1
 
     if count % 10_000_000 == 0:
-        print(f"  Scanned {count:,} works...")
+        log.info(f"  Scanned {count:,} works...")
 
 # Trim to actual size
 oa_ids = oa_ids[:count]
-print(f"Pass 1 complete: {count:,} works found.")
+log.info(f"Pass 1 complete: {count:,} works found.")
 
 if count == 0:
     raise RuntimeError(
@@ -69,5 +77,5 @@ np.savez(
     oa_ids_sorted=oa_ids_sorted,
     n_papers=np.array([count]),
 )
-print(f"Saved paper index to {output_file}")
-print(f"  Papers: {count:,}")
+log.info(f"Saved paper index to {output_file}")
+log.info(f"  Papers: {count:,}")

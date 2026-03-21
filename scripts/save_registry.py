@@ -7,6 +7,11 @@ from datetime import datetime
 import numpy as np
 import polars as pl
 
+sys.path.insert(0, os.path.dirname(__file__))
+from openalex_utils import setup_logging
+
+log = setup_logging(__name__)
+
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
     paper_index_file = snakemake.input["paper_index"]
@@ -20,7 +25,7 @@ else:
     output_file = "openalex_registry.npz"
 
 
-print("Saving OpenAlex registry...")
+log.info("Saving OpenAlex registry...")
 idx = np.load(paper_index_file)
 oa_ids_sorted = idx["oa_ids_sorted"]
 n_papers = int(idx["n_papers"][0])
@@ -45,7 +50,7 @@ np.savez(
     n_authors=np.array([n_authors]),
     sync_date=np.array([sync_date]),
 )
-print(f"  Papers: {n_papers:,}")
-print(f"  Authors: {n_authors:,}")
-print(f"  Sync date: {sync_date}")
-print(f"  Saved {output_file}")
+log.info(f"  Papers: {n_papers:,}")
+log.info(f"  Authors: {n_authors:,}")
+log.info(f"  Sync date: {sync_date}")
+log.info(f"  Saved {output_file}")

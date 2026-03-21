@@ -2,12 +2,20 @@
 
 import gzip
 import json
+import logging
 import os
 import struct
+import sys
 from glob import glob
 from pathlib import Path
 
 import numpy as np
+
+
+def setup_logging(name):
+    """Return a logger that writes to stderr (visible in Snakemake 9 terminal output)."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+    return logging.getLogger(name)
 
 
 def parse_openalex_id(url):

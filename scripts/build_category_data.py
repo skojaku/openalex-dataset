@@ -6,6 +6,11 @@ import sys
 import numpy as np
 import polars as pl
 
+sys.path.insert(0, os.path.dirname(__file__))
+from openalex_utils import setup_logging
+
+log = setup_logging(__name__)
+
 # --- Snakemake or standalone ---
 if "snakemake" in dir():
     topics_file = snakemake.input["topics"]
@@ -19,7 +24,7 @@ else:
     output_paper_category_table = "paper_category_table.csv"
 
 
-print("Building category data...")
+log.info("Building category data...")
 df = pl.read_csv(topics_file)
 
 # --- Build category table ---
@@ -57,8 +62,8 @@ cat_df = pl.DataFrame({
 })
 
 cat_df.write_csv(output_category_table)
-print(f"  Categories: {len(cat_df)} ({len(field_ids)} fields, {len(subfield_ids)} subfields)")
-print(f"  Saved {output_category_table}")
+log.info(f"  Categories: {len(cat_df)} ({len(field_ids)} fields, {len(subfield_ids)} subfields)")
+log.info(f"  Saved {output_category_table}")
 
 # --- Build paper-category table ---
 # Map field_id and subfield_id to class_id
@@ -85,5 +90,5 @@ paper_cat_df = (
 )
 
 paper_cat_df.write_csv(output_paper_category_table)
-print(f"  Paper-category assignments: {len(paper_cat_df):,}")
-print(f"  Saved {output_paper_category_table}")
+log.info(f"  Paper-category assignments: {len(paper_cat_df):,}")
+log.info(f"  Saved {output_paper_category_table}")
