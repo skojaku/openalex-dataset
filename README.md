@@ -4,19 +4,24 @@ Snakemake pipeline that downloads an [OpenAlex](https://openalex.org/) snapshot 
 
 ## Outputs
 
+The pipeline produces two sets of outputs:
+
+- **`preprocessed_unfiltered/`** — all papers matching the allowed types, with an `is_connected` flag
+- **`preprocessed/`** — filtered to the largest weakly connected component (LCC) of the citation network, with contiguous re-indexed IDs
+
 | File | Description |
 |------|-------------|
 | `paper_table.csv` | Paper metadata (paper_id, openalex_id, title, year, doi, type, source_id, is_connected, ...) |
 | `citation_net.npz` | Citation network (scipy sparse CSR matrix) |
 | `author_table.csv` | Author metadata (author_id, openalex_author_id, name, orcid) |
-| `paper_author_net.npz` | Paper-author bipartite network (scipy sparse CSR) |
+| `paper_author_net.npz` | Paper–author bipartite network (scipy sparse CSR) |
 | `category_table.csv` | Field/subfield categories |
-| `paper_category_table.csv` | Paper-category assignments |
-| `abstracts.parquet` | Paper abstracts (PyArrow parquet) |
+| `paper_category_table.csv` | Paper–category assignments |
+| `abstracts.parquet` | Paper abstracts (Parquet) |
 | `source_table.csv` | Journal/venue metadata |
-| `openalex_registry.npz` | OpenAlex ID <-> paper_id mappings |
+| `openalex_registry.npz` | OpenAlex ID ↔ paper_id mappings |
 
-The `is_connected` column in `paper_table.csv` indicates whether a paper belongs to the largest weakly connected component of the citation network (1 = yes, 0 = no).
+In the **unfiltered** output, `is_connected` in `paper_table.csv` indicates whether a paper belongs to the LCC (1 = yes, 0 = no). In the **filtered** output, all papers have `is_connected = 1` and IDs are re-mapped to be contiguous starting from 0.
 
 ## Setup
 
@@ -49,6 +54,8 @@ raw_dir: "/data/datasets/openalex/raw"        # Where to download/find the snaps
 output_dir: "/data/datasets/openalex/preprocessed"  # Where to write outputs
 ```
 
+The pipeline will also create a sibling `preprocessed_unfiltered/` directory alongside `output_dir`.
+
 ## Usage
 
 ```bash
@@ -70,10 +77,18 @@ snakemake --cores all
 
 ```
 S3 snapshot
-  -> pass1_build_index    (scan all works, assign paper_ids)
-  -> pass2_extract_data   (stream works, extract 7 temp files)
-  -> build_*              (convert temp files to final outputs, in parallel)
-  -> save_registry        (save ID mappings)
+  → pass1_build_index         Scan all works, assign paper_ids (sorted by OpenAlex ID)
+  → pass2_extract_data        Stream works, extract 7 temp files
+  → build_citation_net    ┐
+  → build_paper_table     │
+  → build_author_data     ├── Convert temp files to final outputs (parallel)
+  → build_category_data   │
+  → build_abstracts       │
+  → build_source_table    ┘
+  → save_unfiltered_registry   Save ID mappings for unfiltered data
+  → filter_to_lcc              Filter to LCC, re-index all IDs, write final outputs
 ```
 
-Pass 1 assigns `paper_id = position in oa_id-sorted order`. Pass 2 uses binary search on the sorted index for citation reference resolution.
+**Pass 1** assigns `paper_id = position in OpenAlex-ID–sorted order`, filtering to allowed work types (article, book-chapter, preprint, review, letter, book-section). **Pass 2** uses binary search on the sorted index for O(log N) citation reference resolution.
+
+**filter_to_lcc** keeps only papers in the largest weakly connected component, then re-maps paper, author, and category IDs to contiguous ranges and rebuilds all output files.
