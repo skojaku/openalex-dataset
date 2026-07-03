@@ -41,6 +41,8 @@ TEMP_METADATA = j(TEMP_DIR, "paper_metadata.csv.gz")
 TEMP_CIT_EDGES = j(TEMP_DIR, "citation_edges.bin")
 TEMP_AUTH_EDGES = j(TEMP_DIR, "authorship_edges.bin")
 TEMP_AUTH_NAMES = j(TEMP_DIR, "author_names.csv.gz")
+TEMP_AFF_EDGES = j(TEMP_DIR, "affiliation_edges.bin")
+TEMP_INST_NAMES = j(TEMP_DIR, "institution_names.csv.gz")
 TEMP_TOPICS = j(TEMP_DIR, "paper_topics.csv.gz")
 TEMP_ABSTRACTS = j(TEMP_DIR, "abstracts.csv.gz")
 TEMP_SOURCE_NAMES = j(TEMP_DIR, "source_names.csv.gz")
@@ -53,6 +55,8 @@ UF_PAPER_TABLE = j(UNFILTERED_DIR, "paper_table.csv")
 UF_CITATION_NET = j(UNFILTERED_DIR, "citation_net.npz")
 UF_AUTHOR_TABLE = j(UNFILTERED_DIR, "author_table.csv")
 UF_PAPER_AUTHOR_NET = j(UNFILTERED_DIR, "paper_author_net.npz")
+UF_INSTITUTION_TABLE = j(UNFILTERED_DIR, "institution_table.csv")
+UF_AFFILIATION_TABLE = j(UNFILTERED_DIR, "affiliation_table.parquet")
 UF_CATEGORY_TABLE = j(UNFILTERED_DIR, "category_table.csv")
 UF_PAPER_CATEGORY_TABLE = j(UNFILTERED_DIR, "paper_category_table.csv")
 UF_ABSTRACTS = j(UNFILTERED_DIR, "abstracts.parquet")
@@ -67,6 +71,8 @@ PAPER_TABLE = j(OUTPUT_DIR, "paper_table.csv")
 CITATION_NET = j(OUTPUT_DIR, "citation_net.npz")
 AUTHOR_TABLE = j(OUTPUT_DIR, "author_table.csv")
 PAPER_AUTHOR_NET = j(OUTPUT_DIR, "paper_author_net.npz")
+INSTITUTION_TABLE = j(OUTPUT_DIR, "institution_table.csv")
+AFFILIATION_TABLE = j(OUTPUT_DIR, "affiliation_table.parquet")
 CATEGORY_TABLE = j(OUTPUT_DIR, "category_table.csv")
 PAPER_CATEGORY_TABLE = j(OUTPUT_DIR, "paper_category_table.csv")
 ABSTRACTS = j(OUTPUT_DIR, "abstracts.parquet")
@@ -83,6 +89,8 @@ rule all:
         CITATION_NET,
         AUTHOR_TABLE,
         PAPER_AUTHOR_NET,
+        INSTITUTION_TABLE,
+        AFFILIATION_TABLE,
         CATEGORY_TABLE,
         PAPER_CATEGORY_TABLE,
         ABSTRACTS,
@@ -124,6 +132,8 @@ rule pass2_extract_data:
         cit_edges = temp(TEMP_CIT_EDGES),
         auth_edges = temp(TEMP_AUTH_EDGES),
         auth_names = temp(TEMP_AUTH_NAMES),
+        aff_edges = temp(TEMP_AFF_EDGES),
+        inst_names = temp(TEMP_INST_NAMES),
         topics = temp(TEMP_TOPICS),
         abstracts = temp(TEMP_ABSTRACTS),
         source_names = temp(TEMP_SOURCE_NAMES),
@@ -163,6 +173,17 @@ rule build_author_data:
         paper_author_net = UF_PAPER_AUTHOR_NET,
     script:
         "scripts/build_author_data.py"
+
+
+rule build_affiliation_data:
+    input:
+        aff_edges = TEMP_AFF_EDGES,
+        inst_names = TEMP_INST_NAMES,
+    output:
+        institution_table = UF_INSTITUTION_TABLE,
+        affiliation_table = UF_AFFILIATION_TABLE,
+    script:
+        "scripts/build_affiliation_data.py"
 
 
 rule build_category_data:
@@ -214,6 +235,8 @@ rule filter_to_lcc:
         citation_net = UF_CITATION_NET,
         author_table = UF_AUTHOR_TABLE,
         paper_author_net = UF_PAPER_AUTHOR_NET,
+        institution_table = UF_INSTITUTION_TABLE,
+        affiliation_table = UF_AFFILIATION_TABLE,
         category_table = UF_CATEGORY_TABLE,
         paper_category_table = UF_PAPER_CATEGORY_TABLE,
         abstracts = UF_ABSTRACTS,
@@ -223,6 +246,8 @@ rule filter_to_lcc:
         citation_net = CITATION_NET,
         author_table = AUTHOR_TABLE,
         paper_author_net = PAPER_AUTHOR_NET,
+        institution_table = INSTITUTION_TABLE,
+        affiliation_table = AFFILIATION_TABLE,
         category_table = CATEGORY_TABLE,
         paper_category_table = PAPER_CATEGORY_TABLE,
         abstracts = ABSTRACTS,

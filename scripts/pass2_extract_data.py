@@ -6,6 +6,8 @@ For each work, looks up the paper_id and writes:
   - citation_edges.bin: (paper_id, ref_paper_id) int32 pairs
   - authorship_edges.bin: (paper_id, author_id) int32 pairs
   - author_names.csv: (author_id, oa_author_id, name, orcid)
+  - affiliation_edges.bin: (paper_id, author_id, institution_id) int32 triples
+  - institution_names.csv: (institution_id, oa_institution_id, display_name, ror, country_code, type)
   - paper_topics.csv: (paper_id, field_id, field_name, subfield_id, subfield_name, sequence)
   - abstracts.csv: (paper_id, abstract)
   - source_names.csv: (source_id, openalex_source_id, display_name, issn_l, type)
@@ -22,6 +24,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from openalex_utils import (
     BinaryEdgeWriter,
+    BinaryTripleWriter,
     compute_frac_year,
     lookup_ids_batch,
     parse_openalex_id,
@@ -42,6 +45,8 @@ if "snakemake" in dir():
     cit_edges_file = snakemake.output["cit_edges"]
     auth_edges_file = snakemake.output["auth_edges"]
     auth_names_file = snakemake.output["auth_names"]
+    aff_edges_file = snakemake.output["aff_edges"]
+    inst_names_file = snakemake.output["inst_names"]
     topics_file = snakemake.output["topics"]
     abstracts_file = snakemake.output["abstracts"]
     source_names_file = snakemake.output["source_names"]
@@ -52,6 +57,8 @@ else:
     cit_edges_file = "citation_edges.bin"
     auth_edges_file = "authorship_edges.bin"
     auth_names_file = "author_names.csv.gz"
+    aff_edges_file = "affiliation_edges.bin"
+    inst_names_file = "institution_names.csv.gz"
     topics_file = "paper_topics.csv.gz"
     abstracts_file = "abstracts.csv.gz"
     source_names_file = "source_names.csv.gz"
@@ -94,6 +101,13 @@ auth_writer = BinaryEdgeWriter(auth_edges_file)
 auth_fh, auth_csv = _open_csv_writer(auth_names_file)
 auth_csv.writerow(["author_id", "openalex_author_id", "name", "orcid"])
 
+aff_writer = BinaryTripleWriter(aff_edges_file)
+
+inst_fh, inst_csv = _open_csv_writer(inst_names_file)
+inst_csv.writerow([
+    "institution_id", "openalex_institution_id", "display_name", "ror", "country_code", "type",
+])
+
 topics_fh, topics_writer = _open_csv_writer(topics_file)
 topics_writer.writerow([
     "paper_id", "field_id", "field_name", "subfield_id", "subfield_name", "sequence",
@@ -116,11 +130,17 @@ next_author_id = 0
 source_id_map = {}
 next_source_id = 0
 
+# --- Institution ID assignment ---
+# Maps openalex_institution_id -> sequential institution_id
+institution_id_map = {}
+next_institution_id = 0
+
 
 # --- Stream works and extract data ---
 count = 0
 n_cit_edges = 0
 n_auth_edges = 0
+n_aff_edges = 0
 n_topics = 0
 n_abstracts = 0
 
@@ -223,6 +243,32 @@ for work in stream_works(snapshot_dir):
         auth_writer.write(paper_id, aid)
         n_auth_edges += 1
 
+        # --- Affiliations (institutions of this authorship) ---
+        seen_inst_ids = set()
+        for institution in authorship.get("institutions", []) or []:
+            oa_inst_id = parse_openalex_id(institution.get("id"))
+            if oa_inst_id < 0 or oa_inst_id in seen_inst_ids:
+                continue
+            seen_inst_ids.add(oa_inst_id)
+
+            if oa_inst_id not in institution_id_map:
+                iid = next_institution_id
+                institution_id_map[oa_inst_id] = iid
+                next_institution_id += 1
+                inst_csv.writerow([
+                    iid,
+                    oa_inst_id,
+                    institution.get("display_name", ""),
+                    institution.get("ror", "") or "",
+                    institution.get("country_code", "") or "",
+                    institution.get("type", "") or "",
+                ])
+            else:
+                iid = institution_id_map[oa_inst_id]
+
+            aff_writer.write(paper_id, aid, iid)
+            n_aff_edges += 1
+
     # --- Topics (field / subfield) ---
     topics = work.get("topics", [])
     for seq, topic in enumerate(topics):
@@ -269,6 +315,8 @@ meta_fh.close()
 cit_writer.close()
 auth_writer.close()
 auth_fh.close()
+aff_writer.close()
+inst_fh.close()
 topics_fh.close()
 abs_fh.close()
 source_fh.close()
@@ -277,7 +325,9 @@ log.info(f"Pass 2 complete:")
 log.info(f"  Papers processed: {count:,}")
 log.info(f"  Citation edges: {n_cit_edges:,}")
 log.info(f"  Authorship edges: {n_auth_edges:,}")
+log.info(f"  Affiliation edges: {n_aff_edges:,}")
 log.info(f"  Authors: {next_author_id:,}")
+log.info(f"  Institutions: {next_institution_id:,}")
 log.info(f"  Sources: {next_source_id:,}")
 log.info(f"  Topic assignments: {n_topics:,}")
 log.info(f"  Abstracts: {n_abstracts:,}")
