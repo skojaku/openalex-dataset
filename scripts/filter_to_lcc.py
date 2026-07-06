@@ -29,6 +29,8 @@ if "snakemake" in dir():
     in_citation_net = snakemake.input["citation_net"]
     in_author_table = snakemake.input["author_table"]
     in_paper_author_net = snakemake.input["paper_author_net"]
+    in_institution_table = snakemake.input["institution_table"]
+    in_affiliation_table = snakemake.input["affiliation_table"]
     in_category_table = snakemake.input["category_table"]
     in_paper_category_table = snakemake.input["paper_category_table"]
     in_abstracts = snakemake.input["abstracts"]
@@ -37,6 +39,8 @@ if "snakemake" in dir():
     out_citation_net = snakemake.output["citation_net"]
     out_author_table = snakemake.output["author_table"]
     out_paper_author_net = snakemake.output["paper_author_net"]
+    out_institution_table = snakemake.output["institution_table"]
+    out_affiliation_table = snakemake.output["affiliation_table"]
     out_category_table = snakemake.output["category_table"]
     out_paper_category_table = snakemake.output["paper_category_table"]
     out_abstracts = snakemake.output["abstracts"]
@@ -49,6 +53,8 @@ else:
     in_citation_net = f"{base_in}/citation_net.npz"
     in_author_table = f"{base_in}/author_table.csv"
     in_paper_author_net = f"{base_in}/paper_author_net.npz"
+    in_institution_table = f"{base_in}/institution_table.csv"
+    in_affiliation_table = f"{base_in}/affiliation_table.parquet"
     in_category_table = f"{base_in}/category_table.csv"
     in_paper_category_table = f"{base_in}/paper_category_table.csv"
     in_abstracts = f"{base_in}/abstracts.parquet"
@@ -57,6 +63,8 @@ else:
     out_citation_net = f"{base_out}/citation_net.npz"
     out_author_table = f"{base_out}/author_table.csv"
     out_paper_author_net = f"{base_out}/paper_author_net.npz"
+    out_institution_table = f"{base_out}/institution_table.csv"
+    out_affiliation_table = f"{base_out}/affiliation_table.parquet"
     out_category_table = f"{base_out}/category_table.csv"
     out_paper_category_table = f"{base_out}/paper_category_table.csv"
     out_abstracts = f"{base_out}/abstracts.parquet"
@@ -150,6 +158,55 @@ author_df = author_df.with_columns(
 author_df.write_csv(out_author_table)
 log.info(f"  Authors: {len(author_df):,}")
 log.info(f"  Saved {out_author_table}")
+
+# =========================================================================
+# 4b. Affiliation table — filter and remap paper/author/institution IDs
+# =========================================================================
+log.info("Filtering affiliation table...")
+inst_df = pl.read_csv(
+    in_institution_table,
+    schema_overrides={
+        "display_name": pl.String, "ror": pl.String,
+        "country_code": pl.String, "type": pl.String,
+    },
+)
+n_institutions_old = len(inst_df)
+
+aff_df = pl.read_parquet(in_affiliation_table)
+old_aff_pids = aff_df.get_column("paper_id").to_numpy()
+aff_keep = old_to_new_paper[old_aff_pids] >= 0
+aff_df = aff_df.filter(pl.Series(aff_keep))
+
+# Institutions that still appear get contiguous new IDs (sorted by old ID)
+old_inst_ids = np.unique(aff_df.get_column("institution_id").to_numpy())
+old_to_new_inst = np.full(n_institutions_old, -1, dtype=np.int64)
+old_to_new_inst[old_inst_ids] = np.arange(len(old_inst_ids), dtype=np.int64)
+log.info(f"  Institutions: {len(old_inst_ids):,} (was {n_institutions_old:,})")
+
+old_aff_pids = aff_df.get_column("paper_id").to_numpy()
+old_aff_aids = aff_df.get_column("author_id").to_numpy()
+old_aff_iids = aff_df.get_column("institution_id").to_numpy()
+aff_df = aff_df.with_columns(
+    pl.Series("paper_id", old_to_new_paper[old_aff_pids].astype(np.int32)),
+    pl.Series("author_id", old_to_new_author[old_aff_aids].astype(np.int32)),
+    pl.Series("institution_id", old_to_new_inst[old_aff_iids].astype(np.int32)),
+).sort("paper_id", "author_id")
+aff_df.write_parquet(out_affiliation_table)
+log.info(f"  Affiliation rows: {len(aff_df):,}")
+log.info(f"  Saved {out_affiliation_table}")
+
+# =========================================================================
+# 4c. Institution table — filter and remap
+# =========================================================================
+log.info("Filtering institution table...")
+inst_df = inst_df.filter(pl.col("institution_id").is_in(old_inst_ids.tolist()))
+old_iids = inst_df.get_column("institution_id").to_numpy()
+inst_df = inst_df.with_columns(
+    pl.Series("institution_id", old_to_new_inst[old_iids])
+).sort("institution_id")
+inst_df.write_csv(out_institution_table)
+log.info(f"  Institutions: {len(inst_df):,}")
+log.info(f"  Saved {out_institution_table}")
 
 # =========================================================================
 # 5. Paper-category table — filter and remap paper_id

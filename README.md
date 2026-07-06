@@ -15,6 +15,8 @@ The pipeline produces two sets of outputs:
 | `citation_net.npz` | Citation network (scipy sparse CSR matrix) |
 | `author_table.csv` | Author metadata (author_id, openalex_author_id, name, orcid) |
 | `paper_author_net.npz` | Paper–author bipartite network (scipy sparse CSR) |
+| `institution_table.csv` | Institution metadata (institution_id, openalex_institution_id, display_name, ror, country_code, type) |
+| `affiliation_table.parquet` | Paper–author–institution affiliations, one row per (paper_id, author_id, institution_id) (Parquet) |
 | `category_table.csv` | Field/subfield categories |
 | `paper_category_table.csv` | Paper–category assignments |
 | `abstracts.parquet` | Paper abstracts (Parquet) |
@@ -78,17 +80,18 @@ snakemake --cores all
 ```
 S3 snapshot
   → pass1_build_index         Scan all works, assign paper_ids (sorted by OpenAlex ID)
-  → pass2_extract_data        Stream works, extract 7 temp files
-  → build_citation_net    ┐
-  → build_paper_table     │
-  → build_author_data     ├── Convert temp files to final outputs (parallel)
-  → build_category_data   │
-  → build_abstracts       │
-  → build_source_table    ┘
+  → pass2_extract_data        Stream works, extract 9 temp files
+  → build_citation_net       ┐
+  → build_paper_table        │
+  → build_author_data        │
+  → build_affiliation_data   ├── Convert temp files to final outputs (parallel)
+  → build_category_data      │
+  → build_abstracts          │
+  → build_source_table       ┘
   → save_unfiltered_registry   Save ID mappings for unfiltered data
   → filter_to_lcc              Filter to LCC, re-index all IDs, write final outputs
 ```
 
 **Pass 1** assigns `paper_id = position in OpenAlex-ID–sorted order`, filtering to allowed work types (article, book-chapter, preprint, review, letter, book-section). **Pass 2** uses binary search on the sorted index for O(log N) citation reference resolution.
 
-**filter_to_lcc** keeps only papers in the largest weakly connected component, then re-maps paper, author, and category IDs to contiguous ranges and rebuilds all output files.
+**filter_to_lcc** keeps only papers in the largest weakly connected component, then re-maps paper, author, institution, and category IDs to contiguous ranges and rebuilds all output files.

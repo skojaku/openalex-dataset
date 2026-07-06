@@ -165,3 +165,61 @@ class BinaryEdgeReader:
             return np.array([], dtype=np.int32), np.array([], dtype=np.int32)
         arr = np.frombuffer(data, dtype=np.int32).reshape(-1, 2)
         return arr[:, 0].copy(), arr[:, 1].copy()
+
+
+class BinaryTripleWriter:
+    """Write (int32, int32, int32) triples to a binary file. 12 bytes per triple."""
+
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self._file = open(filepath, "wb")
+        self._packer = struct.Struct("<iii")  # three little-endian int32
+
+    def write(self, first, second, third):
+        self._file.write(self._packer.pack(first, second, third))
+
+    def write_batch(self, firsts, seconds, thirds):
+        firsts = np.asarray(firsts, dtype=np.int32)
+        seconds = np.asarray(seconds, dtype=np.int32)
+        thirds = np.asarray(thirds, dtype=np.int32)
+        data = np.column_stack([firsts, seconds, thirds])
+        self._file.write(data.tobytes())
+
+    def close(self):
+        self._file.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
+class BinaryTripleReader:
+    """Read (int32, int32, int32) triples from a binary file in chunks."""
+
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self._filesize = os.path.getsize(filepath)
+        self.n_triples = self._filesize // 12
+
+    def iter_chunks(self, chunk_size=1_000_000):
+        """Yield (first_array, second_array, third_array) chunks."""
+        with open(self.filepath, "rb") as f:
+            remaining = self.n_triples
+            while remaining > 0:
+                n = min(chunk_size, remaining)
+                data = f.read(n * 12)
+                arr = np.frombuffer(data, dtype=np.int32).reshape(-1, 3)
+                yield arr[:, 0], arr[:, 1], arr[:, 2]
+                remaining -= n
+
+    def read_all(self):
+        """Read all triples at once. Returns (first_array, second_array, third_array)."""
+        with open(self.filepath, "rb") as f:
+            data = f.read()
+        if len(data) == 0:
+            empty = np.array([], dtype=np.int32)
+            return empty, empty.copy(), empty.copy()
+        arr = np.frombuffer(data, dtype=np.int32).reshape(-1, 3)
+        return arr[:, 0].copy(), arr[:, 1].copy(), arr[:, 2].copy()
